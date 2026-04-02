@@ -90,7 +90,6 @@ class QueryService:
             result = await db.execute(text(q))
             rows = result.fetchall()
             columns = list(result.keys())
-            print(f"Query executed successfully. Columns: {columns}, Row count: {rows}")
             # Convert rows → JSON safe dicts
             data = []
             for row in rows:
