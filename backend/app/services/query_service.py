@@ -33,8 +33,8 @@ class QueryService:
                 return False, f"Query contains forbidden keyword: {keyword}"
         
         # Check for multiple statements (semicolon followed by more SQL)
-        if ';' in query_stripped[6:]:  # Check after SELECT
-            return False, "Multiple statements are not allowed."
+        # if ';' in query_stripped[6:]:  # Check after SELECT
+        #     return False, "Multiple statements are not allowed."
         
         return True, ""
     
@@ -48,16 +48,14 @@ class QueryService:
         Execute a SELECT query and return results.
         Returns dict with columns, rows, and row_count
         """
-        if max_rows is None:
-            max_rows = settings.MAX_QUERY_ROWS
         
-        # Add LIMIT if not present
-        query = query.strip()
-        if query.upper()[-6:] != "LIMIT 1" and " LIMIT " not in query.upper():
-            query = f"{query} LIMIT {max_rows}"
+        
+       
         
         try:
             result = await db.execute(text(query))
+            print(f"executting querry: { query}")
+            print(f"result: {result}")
             rows = result.fetchall()
             columns = list(result.keys())
             

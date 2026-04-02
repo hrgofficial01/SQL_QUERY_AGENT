@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { queryAPI, historyAPI } from '../services/api'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
-import Schema from './Schema'
+import SchemaVisualization from './SchemaVisualization'
+
 function Dashboard() {
   const [question, setQuestion] = useState('')
   const [response, setResponse] = useState(null)
@@ -10,12 +11,29 @@ function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState([])
   const [error, setError] = useState('')
+  const [schemaLoading, setSchemaLoading] = useState(false)
   const [connectionMode, setConnectionMode] = useState('default')
   const [connectionString, setConnectionString] = useState('')
 
   useEffect(() => {
     loadHistory()
+    loadSchema()
   }, [])
+
+  const loadSchema = async (connStr = null) => {
+    setSchemaLoading(true)
+    try {
+      const res = await queryAPI.getSchema(connStr)
+      setSchema(res.data)
+      console.log('Schema loaded:', res.data)
+    } catch (err) {
+      console.error('Failed to load schema', err)
+      setSchema(null)
+      setError('Failed to load schema: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setSchemaLoading(false)
+    }
+  }
 
   const loadHistory = async () => {
     try {
@@ -37,14 +55,31 @@ function Dashboard() {
     try {
       const connStr = connectionMode === 'custom' ? connectionString : null;
       const res = await queryAPI.askQuestion(question, connStr)
-      const schema_response= await queryAPI.getSchema(connStr)
+      const schema_response = await queryAPI.getSchema(connStr)
       setResponse(res.data)
       setSchema(schema_response.data)
       loadHistory() // Refresh history
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to get response')
+      console.error('Query error:', err)
+      setError(err.response?.data?.detail || err.message || 'Failed to get response')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleConnectionChange = (mode) => {
+    setConnectionMode(mode)
+    const connStr = mode === 'custom' ? connectionString : null
+    loadSchema(connStr)
+  }
+
+  const handleConnectionStringChange = (e) => {
+    setConnectionString(e.target.value)
+  }
+
+  const handleConnectionStringBlur = () => {
+    if (connectionMode === 'custom' && connectionString.trim()) {
+      loadSchema(connectionString)
     }
   }
 
@@ -114,158 +149,187 @@ function Dashboard() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         <div className="bg-white border-b border-gray-200 p-4">
-          <h1 className="text-2xl font-bold text-gray-800">SQL Query Agent</h1>
-          <p className="text-sm text-gray-600">Ask questions in natural language</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">SQL Query Agent</h1>
+              <p className="text-sm text-gray-600">Ask questions in natural language</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">LLM Provider:</span>
+              <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded font-medium">
+                {connectionMode === 'custom' ? 'Custom DB' : 'Demo DB'}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 p-8 overflow-y-auto">
-          {/* Query Input */}
-          <div className="max-w-4xl mx-auto">
-            <div className="mb-6 p-4 bg-white rounded-lg shadow border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Database Connection</h3>
-              <div className="flex gap-4 mb-3">
-                <label className="flex items-center gap-2">
-                  <input 
-                    type="radio" 
-                    name="connectionMode" 
-                    value="default" 
-                    checked={connectionMode === 'default'} 
-                    onChange={() => setConnectionMode('default')}
-                    className="text-indigo-600 focus:ring-indigo-500"
+        <div className="flex-1 flex">
+          {/* Query Section */}
+          <div className="flex-1 p-8 overflow-y-auto">
+            <div className="max-w-4xl mx-auto">
+              <div className="mb-6 p-4 bg-white rounded-lg shadow border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Database Connection</h3>
+                <div className="flex gap-4 mb-3">
+                  <label className="flex items-center gap-2">
+                    <input 
+                      type="radio" 
+                      name="connectionMode" 
+                      value="default" 
+                      checked={connectionMode === 'default'} 
+                      onChange={() => handleConnectionChange('default')}
+                      className="text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">Default Demo DB</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input 
+                      type="radio" 
+                      name="connectionMode" 
+                      value="custom" 
+                      checked={connectionMode === 'custom'} 
+                      onChange={() => handleConnectionChange('custom')}
+                      className="text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">Custom Connection String</span>
+                  </label>
+                </div>
+                {connectionMode === 'custom' && (
+                  <input
+                    type="text"
+                    value={connectionString}
+                    onChange={handleConnectionStringChange}
+                    onBlur={handleConnectionStringBlur}
+                    placeholder="e.g. mysql+pymysql://user:pass@localhost:3306/dbname"
+                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
                   />
-                  <span className="text-sm text-gray-700">Default Demo DB</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input 
-                    type="radio" 
-                    name="connectionMode" 
-                    value="custom" 
-                    checked={connectionMode === 'custom'} 
-                    onChange={() => setConnectionMode('custom')}
-                    className="text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm text-gray-700">Custom Connection String</span>
-                </label>
+                )}
               </div>
-              {connectionMode === 'custom' && (
-                <input
-                  type="text"
-                  value={connectionString}
-                  onChange={(e) => setConnectionString(e.target.value)}
-                  placeholder="e.g. mysql+pymysql://user:pass@localhost:3306/dbname"
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
-                />
+
+              <form onSubmit={handleSubmit} className="mb-8">
+                <div className="flex gap-4">
+                  <input
+                    type="text"
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder="Ask a question (e.g., 'Show all employees with salary > 50000')"
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    disabled={loading}
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400"
+                  >
+                    {loading ? 'Generating...' : 'Ask'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Error Display */}
+              {error && (
+                <div className="mb-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                  {error}
+                </div>
               )}
-            </div>
 
-            <form onSubmit={handleSubmit} className="mb-8">
-              <div className="flex gap-4">
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Ask a question (e.g., 'Show all employees with salary > 50000')"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  disabled={loading}
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400"
-                >
-                  {loading ? 'Generating...' : 'Ask'}
-                </button>
-              </div>
-            </form>
-
-            {/* Error Display */}
-            {error && (
-              <div className="mb-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                {error}
-              </div>
-            )}
-
-            {/* Response Display */}
-            {response && (
-              <div className="space-y-6">
-                {/* SQL Query */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-800">Generated SQL</h3>
-                  <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
-                    <code 
-                      className="sql text-sm"
-                      dangerouslySetInnerHTML={{
-                        __html: response.sql ? hljs.highlight(response.sql, {language: 'sql'}).value : ''
-                      }}
-                    />
-                  </pre>
-                </div>
-                {/* Query Explanation */}
-                <div className="bg-white p-6 rounded-lg shadow">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-800">Explanation</h3>
-                  <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
-                    <code 
-                      className="sql text-sm"
-                      dangerouslySetInnerHTML={{
-                        __html: response.explanation 
-                      }}
-                    />
-                  </pre>
-                </div>
-                {/* Results Table */}
-                {response.result}
-                {response.result && response.result.length > 0 && (
+              {/* Response Display */}
+              {response && (
+                <div className="space-y-6">
+                  {/* SQL Query */}
                   <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-800">
-                      Results ({response.result.length} rows)
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            {response.columns?.map((col) => (
-                              <th
-                                key={col}
-                                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                              >
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {response.result.map((row, idx) => (
-                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <h3 className="text-lg font-semibold mb-4 text-gray-800">Generated SQL</h3>
+                    <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
+                      <code 
+                        className="sql text-sm"
+                        dangerouslySetInnerHTML={{
+                          __html: response.sql ? hljs.highlight(response.sql, {language: 'sql'}).value : ''
+                        }}
+                      />
+                    </pre>
+                  </div>
+                  {/* Query Explanation */}
+                  <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-lg font-semibold mb-4 text-gray-800">Explanation</h3>
+                    <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
+                      <code 
+                        className="sql text-sm"
+                        dangerouslySetInnerHTML={{
+                          __html: response.explanation 
+                        }}
+                      />
+                    </pre>
+                  </div>
+                  {/* Results Table */}
+                  {response.result && response.result.length > 0 && (
+                    <div className="bg-white p-6 rounded-lg shadow">
+                      <h3 className="text-lg font-semibold mb-4 text-gray-800">
+                        Results ({response.result.length} rows)
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
                               {response.columns?.map((col) => (
-                                <td key={col} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                  {String(row[col] ?? '')}
-                                </td>
+                                <th
+                                  key={col}
+                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                >
+                                  {col}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {response.result.map((row, idx) => (
+                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                {response.columns?.map((col) => (
+                                  <td key={col} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {String(row[col] ?? '')}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Error */}
-                {response.error && (
-                  <div className="bg-red-50 p-6 rounded-lg border border-red-200">
-                    <h3 className="text-lg font-semibold mb-2 text-red-800">Error</h3>
-                    <p className="text-red-600">{response.error}</p>
-                  </div>
-                )}
-              </div>
-            )}
+                  {/* Error */}
+                  {response.error && (
+                    <div className="bg-red-50 p-6 rounded-lg border border-red-200">
+                      <h3 className="text-lg font-semibold mb-2 text-red-800">Error</h3>
+                      <p className="text-red-600">{response.error}</p>
+                    </div>
+                  )}
+                  
+                  {/* Schema Warning */}
+                  {(!schema || !schema.tables || schema.tables.length === 0) && (
+                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                      <p className="text-yellow-800 text-sm">
+                        ⚠️ No schema loaded. The database might be empty or connection failed. Check the right panel.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        <div className=" bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto">
-        
-        <Schema schema={schema} />
+          
+          {/* Schema Visualization Panel */}
+          <div className="bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto flex flex-col w-96">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">📊 Database Schema</h2>
+              <p className="text-sm text-gray-500">
+                {schemaLoading ? 'Loading schema...' : 'Visual representation of your database tables and relationships'}
+              </p>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <SchemaVisualization schema={schemaLoading ? null : schema} />
+            </div>
+          </div>
         </div>
       </div>
-      </div>
-      
     </div>
   )
 }
