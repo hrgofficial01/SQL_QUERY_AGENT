@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { queryAPI, historyAPI } from '../services/api'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
-
+import Schema from './Schema'
 function Dashboard() {
   const [question, setQuestion] = useState('')
   const [response, setResponse] = useState(null)
+  const [schema, setSchema] = useState(null)
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState([])
   const [error, setError] = useState('')
@@ -36,7 +37,9 @@ function Dashboard() {
     try {
       const connStr = connectionMode === 'custom' ? connectionString : null;
       const res = await queryAPI.askQuestion(question, connStr)
+      const schema_response= await queryAPI.getSchema(connStr)
       setResponse(res.data)
+      setSchema(schema_response.data)
       loadHistory() // Refresh history
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to get response')
@@ -197,8 +200,20 @@ function Dashboard() {
                     />
                   </pre>
                 </div>
-
+                {/* Query Explanation */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-800">Explanation</h3>
+                  <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
+                    <code 
+                      className="sql text-sm"
+                      dangerouslySetInnerHTML={{
+                        __html: response.explanation 
+                      }}
+                    />
+                  </pre>
+                </div>
                 {/* Results Table */}
+                {response.result}
                 {response.result && response.result.length > 0 && (
                   <div className="bg-white p-6 rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-4 text-gray-800">
@@ -244,8 +259,13 @@ function Dashboard() {
               </div>
             )}
           </div>
+        <div className=" bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto">
+        
+        <Schema schema={schema} />
         </div>
       </div>
+      </div>
+      
     </div>
   )
 }

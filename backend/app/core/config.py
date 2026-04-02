@@ -4,11 +4,11 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Database for users, auth, and query history
-    APP_DATABASE_URL: str = "mysql+aiomysql://root:12345@localhost:3306/sqlquerrydb"
+    APP_DATABASE_URL: str = "mysql+aiomysql://root:Ku%402003j@localhost:3306/sqlquerrydb"
     
     # Default target database for querying (sample data)
-    DEFAULT_TARGET_DB_URL: str = "mysql+aiomysql://root:12345@localhost:3306/sql_agent_db"
-    
+    DEFAULT_TARGET_DB_URL: str = "mysql+aiomysql://root:Ku%402003j@localhost:3306/sql_agent_db"
+    GOOGLE_API_KEY: str="AIzaSyC9m9FQXEVAt_r5nVdjQnawTgwk0WIVnhw"
     # JWT Settings
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
