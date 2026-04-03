@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect,useContext } from 'react'
+import {toast} from 'react-toastify'
 import { queryAPI, historyAPI } from '../services/api'
 import hljs from 'highlight.js'
+import {AuthContext} from '../context/AuthContext'
 import 'highlight.js/styles/github.css'
-import SchemaVisualization from './SchemaVisualization'
-
+import Schema from './Schema'
+import { Navigate } from 'react-router-dom'
+import Table from './Table'
 function Dashboard() {
+  const {isAuthenticated} = useContext(AuthContext)
   const [question, setQuestion] = useState('')
   const [response, setResponse] = useState(null)
   const [schema, setSchema] = useState(null)
@@ -17,24 +21,18 @@ function Dashboard() {
 
   useEffect(() => {
     loadHistory()
-    loadSchema()
-  }, [])
-
-  const loadSchema = async (connStr = null) => {
-    setSchemaLoading(true)
-    try {
-      const res = await queryAPI.getSchema(connStr)
-      setSchema(res.data)
-      console.log('Schema loaded:', res.data)
-    } catch (err) {
-      console.error('Failed to load schema', err)
-      setSchema(null)
-      setError('Failed to load schema: ' + (err.response?.data?.detail || err.message))
-    } finally {
-      setSchemaLoading(false)
+    fetchSchema()
+  },[])
+  
+  const fetchSchema = async (connstr=null) => {
+    try{
+      const schema_response= await queryAPI.getSchema(connstr)
+      setSchema(schema_response.data)
+    }
+    catch(err){
+      console.error('Failed to fetch schema', err)
     }
   }
-
   const loadHistory = async () => {
     try {
       const res = await historyAPI.getHistory({ limit: 50 })
@@ -54,14 +52,21 @@ function Dashboard() {
 
     try {
       const connStr = connectionMode === 'custom' ? connectionString : null;
-      const res = await queryAPI.askQuestion(question, connStr)
-      const schema_response = await queryAPI.getSchema(connStr)
+      const res = await queryAPI.askQuestion(question, connStr)    
       setResponse(res.data)
-      setSchema(schema_response.data)
+      if(connectionMode==='custom'){
+        fetchSchema(connStr) // Refresh schema if custom connection was used
+      }
       loadHistory() // Refresh history
     } catch (err) {
-      console.error('Query error:', err)
-      setError(err.response?.data?.detail || err.message || 'Failed to get response')
+      if(err.response?.status === 401){
+        setError('Session expired. Please log in again.')
+        localStorage.removeItem('token')
+        toast.error("Session expired. Please login again.");
+        setTimeout(() => {window.location.href = '/login' }, 2000);
+      }
+
+      setError(err.response?.data?.detail || 'Failed to get response')
     } finally {
       setLoading(false)
     }
@@ -96,7 +101,6 @@ function Dashboard() {
       console.error('Failed to toggle bookmark', err)
     }
   }
-
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar - History */}
@@ -223,77 +227,19 @@ function Dashboard() {
                     {loading ? 'Generating...' : 'Ask'}
                   </button>
                 </div>
-              </form>
-
-              {/* Error Display */}
-              {error && (
-                <div className="mb-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                  {error}
+                {/* Query Explanation */}
+                <div className="bg-white p-6 rounded-lg shadow">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-800">Explanation</h3>
+                  
+                    <code 
+                      className="sql text-sm"
+                      dangerouslySetInnerHTML={{
+                        __html: response.explanation 
+                      }}
+                    />
+                 
                 </div>
-              )}
-
-              {/* Response Display */}
-              {response && (
-                <div className="space-y-6">
-                  {/* SQL Query */}
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-800">Generated SQL</h3>
-                    <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
-                      <code 
-                        className="sql text-sm"
-                        dangerouslySetInnerHTML={{
-                          __html: response.sql ? hljs.highlight(response.sql, {language: 'sql'}).value : ''
-                        }}
-                      />
-                    </pre>
-                  </div>
-                  {/* Query Explanation */}
-                  <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4 text-gray-800">Explanation</h3>
-                    <pre className="bg-gray-50 p-4 rounded overflow-x-auto">
-                      <code 
-                        className="sql text-sm"
-                        dangerouslySetInnerHTML={{
-                          __html: response.explanation 
-                        }}
-                      />
-                    </pre>
-                  </div>
-                  {/* Results Table */}
-                  {response.result && response.result.length > 0 && (
-                    <div className="bg-white p-6 rounded-lg shadow">
-                      <h3 className="text-lg font-semibold mb-4 text-gray-800">
-                        Results ({response.result.length} rows)
-                      </h3>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              {response.columns?.map((col) => (
-                                <th
-                                  key={col}
-                                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                                >
-                                  {col}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {response.result.map((row, idx) => (
-                              <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                {response.columns?.map((col) => (
-                                  <td key={col} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                    {String(row[col] ?? '')}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                <Table response={response} />
 
                   {/* Error */}
                   {response.error && (

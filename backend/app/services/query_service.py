@@ -16,26 +16,37 @@ class QueryService:
     @staticmethod
     def validate_sql(query: str) -> tuple[bool, str]:
         """
-        Validate SQL query for safety.
-        Returns (is_valid, error_message)
+        Validate SQL query safely.
+        - Only SELECT queries allowed
+        - No dangerous keywords
+        - No multiple statements
+        - Allows 1 trailing semicolon
         """
-        query_stripped = query.strip().upper()
-        
-        # Check if it starts with SELECT
-        if not query_stripped.startswith("SELECT"):
+        original = query.strip()
+        no_semicolon = original.rstrip(";").strip()
+
+        # Normalize for keyword checking
+        upper = no_semicolon.upper()
+
+        # 1. Must start with SELECT
+        if not upper.startswith("SELECT"):
             return False, "Only SELECT queries are allowed."
-        
-        # Check for dangerous keywords
+
+        # 2. Multiple statements check
+        # More than one semicolon is not allowed
+        if original.count(";") > 1:
+            return False, "Multiple statements are not allowed."
+
+        # If a semicolon exists, it must be at the end
+        if ";" in original[:-1]:
+            return False, "Semicolon allowed only at the end."
+
+        # 3. Dangerous keyword check (whole words)
         for keyword in QueryService.DANGEROUS_KEYWORDS:
-            # Use word boundary matching to avoid false positives
-            pattern = r'\b' + keyword + r'\b'
-            if re.search(pattern, query_stripped):
+            pattern = rf"\b{keyword}\b"
+            if re.search(pattern, upper):
                 return False, f"Query contains forbidden keyword: {keyword}"
-        
-        # Check for multiple statements (semicolon followed by more SQL)
-        # if ';' in query_stripped[6:]:  # Check after SELECT
-        #     return False, "Multiple statements are not allowed."
-        
+
         return True, ""
     
     @staticmethod
@@ -45,31 +56,55 @@ class QueryService:
         max_rows: int = None
     ) -> Dict[str, Any]:
         """
-        Execute a SELECT query and return results.
-        Returns dict with columns, rows, and row_count
+        Execute a SELECT query and return JSON-safe results.
+        Converts datetime, date, decimal → JSON-safe values.
         """
-        
-        
-       
-        
+    
+        from datetime import datetime, date
+        from decimal import Decimal
+    
+        if max_rows is None:
+            max_rows = settings.MAX_QUERY_ROWS
+    
+        # Clean query
+        q = query.strip().rstrip(";")
+    
+        # Add LIMIT only if not present
+        if not re.search(r"\bLIMIT\b\s*\d+", q, re.IGNORECASE):
+            q = f"{q} LIMIT {max_rows}"
+    
+        # Now ALWAYS add a semicolon at the end
+        q = q + ";"
+    
+        # Serializer for JSON-safe values
+        def serialize_value(value):
+            if isinstance(value, (datetime, date)):
+                return value.isoformat()
+            if isinstance(value, Decimal):
+                return float(value)
+            return value
+    
         try:
-            result = await db.execute(text(query))
-            print(f"executting querry: { query}")
-            print(f"result: {result}")
+            print(f"Executing SQL Query: {q}")
+    
+            result = await db.execute(text(q))
             rows = result.fetchall()
             columns = list(result.keys())
-            
-            # Convert rows to list of dicts
+            # Convert rows → JSON safe dicts
             data = []
             for row in rows:
-                data.append(dict(zip(columns, row)))
-            
+                row_dict = {}
+                for col, val in zip(columns, row):
+                    row_dict[col] = serialize_value(val)
+                data.append(row_dict)
+    
             return {
                 "success": True,
                 "columns": columns,
                 "rows": data,
                 "row_count": len(data)
             }
+    
         except Exception as e:
             return {
                 "success": False,
@@ -78,6 +113,5 @@ class QueryService:
                 "rows": [],
                 "row_count": 0
             }
-
 
 query_service = QueryService()
